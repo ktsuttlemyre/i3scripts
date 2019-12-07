@@ -44,17 +44,49 @@ from util import *
 #
 # Most of these are character codes for font awesome:
 #   http://fortawesome.github.io/Font-Awesome/icons/
-#
+
+
+FA_CALCULATOR = '\uf1ec'
+FA_CHROME = '\uf268'
+FA_CODE = '\uf121'
+FA_FILE_PDF_O = '\uf1c1'
+FA_FILE_TEXT_O = '\uf0f6'
+FA_FILE_EXCEL_O = '\uf1c3'
+FA_RSS_SQUARE = '\uf143'
+FA_FILES_O = '\uf0c5'
+FA_FIREFOX = '\uf269'
+FA_ENVELOPE_O = '\uf0e0'
+FA_EYEDROPPER = '\uf1fb'
+FA_MUSIC = '\uf001'
+FA_PICTURE_O = '\uf03e'
+FA_KEY = '\uf084'
+FA_TERMINAL = '\uf120'
+FA_CUBE = '\uf1b2'
+FA_PLAY_CIRCLE = '\uf144'
+FA_DOWNLOAD = '\uf019'
+FA_VOLUME_UP = '\uf028'
+FA_STEAM = '\uf1b6'
+FA_PAINTBRUSH = '\uf1fc'
+FA_FILM = '\uf008'
+FA_MAP_O = '\uf278'
+FA_DATABASE = '\uf1c0'
+FA_TELEGRAM = '\uf2c6'
+FA_SLACK = '\uf198'
+FA_CLOCK_O = '\uf017'
+
 # If you're not sure what the WM_CLASS is for your application, you can use
 # xprop (https://linux.die.net/man/1/xprop). Run `xprop | grep WM_CLASS`
 # then click on the application you want to inspect.
 WINDOW_ICONS = {
+    'atril': FA_FILE_PDF_O,
     'alacritty': fa.icons['terminal'],
     'atom': fa.icons['code'],
     'banshee': fa.icons['play'],
     'blender': fa.icons['cube'],
+    'Caja': FA_FILES_O,
     'chromium': fa.icons['chrome'],
     'cura': fa.icons['cube'],
+    'DBeaver': FA_DATABASE,
     'darktable': fa.icons['image'],
     'discord': fa.icons['comment'],
     'eclipse': fa.icons['code'],
@@ -67,11 +99,15 @@ WINDOW_ICONS = {
     'filezilla': fa.icons['server'],
     'firefox': fa.icons['firefox'],
     'firefox-esr': fa.icons['firefox'],
-    'gimp-2.8': fa.icons['image'],
+    'Galculator': FA_CALCULATOR,
+    'gcolor2': FA_EYEDROPPER,
+    'gimp': fa.icons['image'],
     'gnome-control-center': fa.icons['toggle-on'],
     'gnome-terminal-server': fa.icons['terminal'],
     'google-chrome': fa.icons['chrome'],
     'gpick': fa.icons['eye-dropper'],
+    'gpodder': FA_RSS_SQUARE,
+    'gvim': FA_CODE,
     'imv': fa.icons['image'],
     'java': fa.icons['code'],
     'jetbrains-idea': fa.icons['code'],
@@ -80,7 +116,9 @@ WINDOW_ICONS = {
     'keybase': fa.icons['key'],
     'kicad': fa.icons['microchip'],
     'kitty': fa.icons['terminal'],
+    'kodi': FA_PLAY_CIRCLE,
     'libreoffice': fa.icons['file-alt'],
+    'libreoffice-calc': FA_FILE_EXCEL_O,
     'lua5.1': fa.icons['moon'],
     'mpv': fa.icons['tv'],
     'mupdf': fa.icons['file-pdf'],
@@ -90,6 +128,7 @@ WINDOW_ICONS = {
     'openscad': fa.icons['cube'],
     'pavucontrol': fa.icons['volume-up'],
     'postman': fa.icons['space-shuttle'],
+    'pdfmod': FA_FILE_PDF_O,
     'rhythmbox': fa.icons['play'],
     'robo3t': fa.icons['database'],
     'slack': fa.icons['slack'],
@@ -99,10 +138,15 @@ WINDOW_ICONS = {
     'subl': fa.icons['file-alt'],
     'subl3': fa.icons['file-alt'],
     'sublime_text': fa.icons['file-alt'],
+    'SWT': FA_DATABASE, #DBeaver changed its wm_class name?
+    'telegram-desktop': FA_TELEGRAM,
+    'termite': FA_TERMINAL,
     'thunar': fa.icons['copy'],
     'thunderbird': fa.icons['envelope'],
     'totem': fa.icons['play'],
+    'transmission-gtk': FA_DOWNLOAD,
     'urxvt': fa.icons['terminal'],
+    'VirtualBox': FA_CUBE,
     'xfce4-terminal': fa.icons['terminal'],
     'xournal': fa.icons['file-alt'],
     'yelp': fa.icons['code'],
@@ -123,6 +167,7 @@ def ensure_window_icons_lowercase():
     global WINDOW_ICONS
     WINDOW_ICONS = {name.lower(): icon for name, icon in WINDOW_ICONS.items()}
 
+fuzzySearchIndex=list(WINDOW_ICONS.keys())
 
 def icon_for_window(window):
     # Try all window classes and use the first one we have an icon for
@@ -132,6 +177,10 @@ def icon_for_window(window):
             cls = cls.lower()  # case-insensitive matching
             if cls in WINDOW_ICONS:
                 return WINDOW_ICONS[cls]
+            else:
+                for key in fuzzySearchIndex:
+                    if cls in key:
+                        return WINDOW_ICONS[key]
     logging.info(
         'No icon available for window with classes: %s' % str(classes))
     return DEFAULT_ICON
@@ -185,6 +234,29 @@ def on_exit(i3):
     i3.main_quit()
     sys.exit(0)
 
+def start(args):
+    RENUMBER_WORKSPACES = not args["norenumber_workspaces"]
+
+    logging.basicConfig(level=logging.INFO)
+
+    ensure_window_icons_lowercase()
+
+    i3 = i3ipc.Connection()
+
+    # Exit gracefully when ctrl+c is pressed
+    for sig in [signal.SIGINT, signal.SIGTERM]:
+        signal.signal(sig, lambda signal, frame: on_exit(i3))
+
+    rename_workspaces(i3, icon_list_format=args["icon_list_format"])
+
+    # Call rename_workspaces() for relevant window events
+    def event_handler(i3, e):
+        if e.change in ['new', 'close', 'move']:
+            rename_workspaces(i3, icon_list_format=args["icon_list_format"])
+
+    i3.on('window', event_handler)
+    i3.on('workspace::move', event_handler)
+    i3.main()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -209,26 +281,6 @@ if __name__ == '__main__':
         "    - chemist: factorize with subscripts (e.g. aababa -> a₄b₂)."
     )
     args = parser.parse_args()
+    
+    start(vars(args))
 
-    RENUMBER_WORKSPACES = not args.norenumber_workspaces
-
-    logging.basicConfig(level=logging.INFO)
-
-    ensure_window_icons_lowercase()
-
-    i3 = i3ipc.Connection()
-
-    # Exit gracefully when ctrl+c is pressed
-    for sig in [signal.SIGINT, signal.SIGTERM]:
-        signal.signal(sig, lambda signal, frame: on_exit(i3))
-
-    rename_workspaces(i3, icon_list_format=args.icon_list_format)
-
-    # Call rename_workspaces() for relevant window events
-    def event_handler(i3, e):
-        if e.change in ['new', 'close', 'move']:
-            rename_workspaces(i3, icon_list_format=args.icon_list_format)
-
-    i3.on('window', event_handler)
-    i3.on('workspace::move', event_handler)
-    i3.main()
